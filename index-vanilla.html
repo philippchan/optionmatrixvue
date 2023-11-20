@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="./main.css">
+    
+</head>
+
+<body>
+    <div id="app">
+
+        <div>
+            <label for="price">Underlying Asset Price:</label>
+            <input type="number" id="price" v-model="price" @change="calculateResults">
+        </div>
+        <div>
+            <label for="interest-rate">Annual Interest Rate (%):</label>
+            <input type="number" id="interest-rate" v-model.number="interestRate" placeholder="e.g., 5 for 5%"
+                @change="calculateResults">
+        </div>
+        <div>
+            <label for="std-deviation">Standard Deviation:</label>
+            <input type="number" id="std-deviation" step="0.01" v-model="standardDeviation" @change="calculateResults">
+
+            <label for="precision">Precision:</label>
+            <input type="number" id="precision" min="1" max="10" v-model="precision">
+        </div>
+        <div>
+            <label for="expiration">Time to Expiration:</label>
+            <input type="number" step="0.01" :value="yearsToExpr" @change="updateFromYears($event.target.value)" />
+        </div>
+        <div>
+            <label for="expiration">Days to Expiration:</label>
+            <input type="number" v-model.number="daysToExpr" step="0.1" @change="calculateResults" />
+        </div>
+        <div>
+            <label for="expiration">Expiration Date:</label>
+            <!-- <input type="date" id="expiration" v-model="exprDate" @change="updateExprDate">  -->
+            <input type="date" :value="exprDate" @change="updateFromCalendar($event.target.value)" :min="currentDate" />
+        </div>
+        <div>
+            <label for="model-selection">Pricing Model:</label>
+            <select id="model-selection" v-model="selectedModel" @change="calculateResults">
+                <option value="black-scholes">Black-Scholes</option>
+                <!-- Add other models as options here -->
+            </select>
+        </div>
+        <div>
+            <label for="realtime-toggle">Real-Time Update:</label>
+            <input type="checkbox" id="realtime-toggle" v-model="isRealTime">
+
+            </select>
+        </div>
+        <div>
+            <!-- Dropdown for selecting strike increments -->
+            <label for="strike-increments">Strike Increments:</label>
+            <select id="strike-increments" v-model="selectedIncrement" @change="updateStrikePrices">
+                <option value="5">5</option>
+                <option value="1">1</option>
+                <option value="0.5">0.5</option>
+                <option value="0.1">0.1</option>
+                <option value="0.01">0.01</option>
+                <option value="0.001">0.001</option>
+                <option value="CUST">CUST</option>
+            </select>
+
+            <!-- Input for custom strike price, shown only when CUST is selected -->
+            <input v-if="selectedIncrement === 'CUST'" type="number" placeholder="Enter custom strike"
+                v-model="customStrike" @input="updateStrikePrices" />
+
+            <label for="page-size">Display count:</label>
+            <input type="number" id="page-size" v-model="displayCount" @change="updateStrikePrices" step="2" />
+
+        </div>
+        <div>
+            <!-- Checkbox to enable/disable the Date Engine -->
+            <label for="use-date-engine">Use Date Engine:</label>
+            <input type="checkbox" id="use-date-engine" v-model="useDateEngine" @change="toggleDateEngine" />
+
+            <!-- Button to open the Date Engine Properties dialog -->
+            <button @click="showDatePropertiesDialog = true">Date Engine Properties</button>
+            <span>{{ calculatedExpirationDate }}</span>
+
+
+            <!-- Date Engine Properties dialog/popup -->
+            <div v-if="showDatePropertiesDialog" class="modal-overlay">
+                <div class="date-engine-properties-modal">
+                    <h2>Date Engine Properties</h2>
+
+                    <!-- Expiration Weekday Selection -->
+                    <div class="form-control">
+                        <label for="expiration-weekday">Expiration weekday:</label>
+                        <select id="expiration-weekday" v-model="dateEngineProperties.expirationWeekday">
+                            <option value="Monday">Monday</option>
+                            <option value="Tuesday">Tuesday</option>
+                            <option value="Wednesday">Wednesday</option>
+                            <option value="Thursday">Thursday</option>
+                            <option value="Friday">Friday</option>
+                        </select>
+                    </div>
+
+                    <!-- Occurrence Selection -->
+                    <div class="form-control">
+                        <label for="occurrence">Occurrence:</label>
+                        <select id="occurrence" v-model="dateEngineProperties.occurrence">
+                            <option value="1st">1st</option>
+                            <option value="2nd">2nd</option>
+                            <option value="3rd">3rd</option>
+                            <option value="4th">4th</option>
+                            <option value="Last">Last</option>
+                        </select>
+                    </div>
+
+                    <!-- Day Offset Input -->
+                    <div class="form-control">
+                        <label for="day-offset">Day offset:</label>
+                        <input type="number" id="day-offset" v-model.number="dateEngineProperties.dayOffset" />
+                    </div>
+
+                    <!-- Expiration Time Input -->
+                    <div class="form-control">
+                        <label for="expiration-time">Expiration Time:</label>
+                        <input type="time" id="expiration-time" v-model="dateEngineProperties.expirationTime" />
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="actions">
+                        <button @click="applyDateEngineProperties">OK</button>
+                        <button @click="showDatePropertiesDialog = false">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Price</th>
+                        <th>Strike</th>
+                        <th>Call</th>
+                        <th>Put</th>
+                        <th>Call Delta</th>
+                        <th>Put Delta</th>
+                        <th>Gamma</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="result in results">
+                        <td>{{ result.price.toFixed(this.precision) }}</td>
+                        <td>{{ result.strikePrice.toFixed(this.precision) }}</td>
+                        <td>{{ result.callPrice.toFixed(this.precision) }}</td>
+                        <td>{{ result.putPrice.toFixed(this.precision) }}</td>
+                        <td>{{ result.callDelta.toFixed(this.precision) }}</td>
+                        <td>{{ result.putDelta.toFixed(this.precision) }}</td>
+                        <td>{{ result.gamma.toFixed(this.precision) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/jstat/latest/jstat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script src="math.js"></script>
+    <script src="main.js"></script>
+</body>
+
+</html>
